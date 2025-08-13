@@ -188,7 +188,14 @@ export default function Home() {
 						)}
 					</div>
 					<button className="btn" onClick={generate} disabled={loading || (!text?.trim() || text.trim().length < 50) && !geminiFiles.some(f => f.status === 'ready' && f.geminiFileId)}>{loading ? 'Generiere…' : 'Fragen generieren'}</button>
-					{error && <div className="error" style={{ display: 'block', marginTop: 16 }}>{error}</div>}
+					{error && (
+						<div className="error" style={{ display: 'block', marginTop: 16 }}>
+							{error}
+							<button className="btn" onClick={generate} disabled={loading} style={{ marginLeft: 12, padding: '4px 12px', fontSize: '0.9em' }}>
+								Nochmal versuchen
+							</button>
+						</div>
+					)}
 				</div>
 			</div>
 

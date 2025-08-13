@@ -120,7 +120,7 @@ export default async function handler(req, res) {
 				});
 			}
 			
-			const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent', {
+			const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -151,14 +151,20 @@ export default async function handler(req, res) {
 		}
 		
 		const textOut = result.response.text();
+		console.log('AI Response for file upload:', textOut);
 		let data = safeParseJson(textOut);
+		console.log('Parsed data:', data);
 		if (!data) {
 			const fixPrompt = `Korrigiere folgende Ausgabe zu gültigem JSON Array im spezifizierten Schema, ohne jeglichen Zusatztext:\n${textOut}`;
 			const fix = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: fixPrompt }] }] });
 			data = safeParseJson(fix.response.text());
+			console.log('Fixed data:', data);
 		}
 		const err = validate(data, questionCount);
-		if (err) return res.status(502).json({ error: err });
+		if (err) {
+			console.log('Validation error:', err, 'Data structure:', JSON.stringify(data, null, 2));
+			return res.status(502).json({ error: err });
+		}
 		
 		const shuffledQuestions = shuffleCorrectAnswers(data);
 		return res.status(200).json({ questions: shuffledQuestions });
