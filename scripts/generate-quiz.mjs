@@ -23,7 +23,21 @@ if (!userInput) {
   process.exit(1);
 }
 
-const prompt = `Du bist ein Trainer für angehende Product Manager.\nAus folgendem Text:\n"${userInput}"\n\nErstelle genau 3 Multiple-Choice-Fragen mit je 1 richtigen und 4 falschen Antworten.\nKennzeichne die richtige Antwort und formuliere die Fragen so, dass sie praxisnah sind.\nLiefere ausschliesslich gültiges JSON ohne Erklärtext im Format:\n[{
+const prompt = `Du bist ein Trainer für angehende Product Manager.
+Aus folgendem Text:
+"${userInput}"
+
+Erstelle genau 3 Multiple-Choice-Fragen mit je 1 richtigen und 4 falschen Antworten.
+
+WICHTIGE REGELN für die Fragen:
+- Die richtige Antwort muss EINDEUTIG richtig sein basierend auf dem gegebenen Text
+- Die falschen Antworten müssen KLAR falsch oder unpassend für den Kontext sein
+- Vermeide Antworten, die "auch richtig" sein könnten
+- Fokussiere auf spezifische Details aus dem Text, nicht auf allgemeine PM-Prinzipien
+- Stelle sicher, dass nur eine Antwort logisch korrekt ist
+
+Liefere ausschließlich gültiges JSON ohne Erklärtext im Format:
+[{
   "frage": "...",
   "optionen": ["...","...","...","...","..."],
   "richtige_index": 0,
