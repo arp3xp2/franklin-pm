@@ -71,24 +71,85 @@ export default async function handler(req, res) {
 		res.setHeader('Retry-After', String(Math.ceil((entry.start + windowMs - now) / 1000)));
 		return res.status(429).json({ error: 'Zu viele Anfragen. Bitte später erneut versuchen.' });
 	}
-	const { text } = req.body || {};
-	if (!text || typeof text !== 'string' || text.trim().length < 50) {
-		return res.status(400).json({ error: 'Bitte ausreichend Lerntext senden.' });
+	const { text, files } = req.body || {};
+	const hasValidText = text && typeof text === 'string' && text.trim().length >= 50;
+	const hasValidFiles = files && Array.isArray(files) && files.some(f => f.geminiFileId);
+	
+	if (!hasValidText && !hasValidFiles) {
+		return res.status(400).json({ error: 'Bitte ausreichend Lerntext senden (mind. 50 Zeichen) oder mindestens eine Datei anhängen.' });
 	}
 	if (!process.env.GEMINI_API_KEY) {
 		return res.status(500).json({ error: 'Server-Konfiguration fehlt (API Key).' });
 	}
 
-	const questionCount = calculateQuestionCount(text.length);
-	const prompt = `Du bist ein Trainer für angehende Product Manager.\nAus folgendem Text:\n"${text}"\n\nErstelle genau ${questionCount} Multiple-Choice-Fragen mit je 1 richtigen und 4 falschen Antworten.\nKennzeichne die richtige Antwort und formuliere die Fragen so, dass sie praxisnah sind.\nLiefere ausschliesslich gültiges JSON ohne Erklärtext im Format:\n[{
+	const questionCount = hasValidText ? calculateQuestionCount(text.length) : 3; // default to 3 for file-only
+	let basePrompt;
+	if (hasValidText) {
+		basePrompt = `Du bist ein Trainer für angehende Product Manager.\nAus folgendem Text:\n"${text}"\n\nErstelle genau ${questionCount} Multiple-Choice-Fragen mit je 1 richtigen und 4 falschen Antworten.\nKennzeichne die richtige Antwort und formuliere die Fragen so, dass sie praxisnah sind.\nLiefere ausschliesslich gültiges JSON ohne Erklärtext im Format:\n[{
   "frage": "...",
   "optionen": ["...","...","...","...","..."],
   "richtige_index": 0,
   "erklaerung": "..."
 }]`;
+	} else {
+		basePrompt = `Du bist ein Trainer für angehende Product Manager.\nAus den angehängten Dateien erstelle genau ${questionCount} Multiple-Choice-Fragen mit je 1 richtigen und 4 falschen Antworten.\nKennzeichne die richtige Antwort und formuliere die Fragen so, dass sie praxisnah sind.\nLiefere ausschliesslich gültiges JSON ohne Erklärtext im Format:\n[{
+  "frage": "...",
+  "optionen": ["...","...","...","...","..."],
+  "richtige_index": 0,
+  "erklaerung": "..."
+}]`;
+	}
 
 	try {
-		const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+		let result;
+		
+		if (hasValidFiles) {
+			// Use REST API with file attachments
+			const parts = [{ text: basePrompt }];
+			
+			for (const file of files.filter(f => f.geminiFileId)) {
+				const fileUri = file.geminiFileId.startsWith('https://') 
+					? file.geminiFileId 
+					: `https://generativelanguage.googleapis.com/v1beta/${file.geminiFileId}`;
+				
+				parts.push({
+					fileData: {
+						fileUri,
+						mimeType: file.type || 'application/octet-stream'
+					}
+				});
+			}
+			
+			const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'x-goog-api-key': process.env.GEMINI_API_KEY
+				},
+				body: JSON.stringify({
+					contents: [{
+						role: 'user',
+						parts
+					}]
+				})
+			});
+			
+			if (!response.ok) {
+				const errorText = await response.text();
+				throw new Error(`Gemini API error: ${response.status} ${errorText.slice(0, 200)}`);
+			}
+			
+			const responseData = await response.json();
+			if (!responseData.candidates?.[0]?.content?.parts?.[0]?.text) {
+				throw new Error('Unerwartete Antwort von Gemini API');
+			}
+			
+			result = { response: { text: () => responseData.candidates[0].content.parts[0].text } };
+		} else {
+			// Use SDK for text-only
+			result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: basePrompt }] }] });
+		}
+		
 		const textOut = result.response.text();
 		let data = safeParseJson(textOut);
 		if (!data) {
