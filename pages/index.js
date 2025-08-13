@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import VERSION from '../version.js';
 
 export default function Home() {
 	const [text, setText] = useState('');
@@ -155,6 +156,7 @@ export default function Home() {
 			<div className="header">
 				<h1>Franklin PM 🎓</h1>
 				<p>PM-Quiz Generator für deine Lernmaterialien</p>
+				<small style={{ color: '#fff', fontSize: '0.8em' }}>v{VERSION.number} "{VERSION.codename}"</small>
 			</div>
 
 			<div className="card">

@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is "Franklin Demo" - an MVP learning app for aspiring Product Managers. The app generates AI-powered multiple-choice questions from user-provided PM learning materials and provides immediate quiz functionality with feedback.
+This is "Franklin PM" - an MVP learning app for aspiring Product Managers. The app generates AI-powered multiple-choice questions from user-provided PM learning materials (text or uploaded files) and provides immediate quiz functionality with feedback.
 
-**Current State**: CLI-based quiz generator using Google's Gemini AI
-**Planned Evolution**: Web application with React frontend (per PRD.md)
+**Current Version**: v0.2.1 "Gemini Scholar" - File upload support for quiz generation
+**Evolution**: From CLI-based to full web application with Gemini file upload integration
 
 ## Development Commands
 
@@ -41,17 +41,20 @@ The application requires a Gemini API key for AI question generation:
 
 ## Architecture & Key Patterns
 
-### Current CLI Architecture
-- **Entry point**: `scripts/generate-quiz.mjs` 
-- **AI Integration**: Google Generative AI (`gemini-1.5-flash` model)
-- **Input method**: Command line arguments
+### Current Web Architecture
+- **Frontend**: Next.js with React (pages/index.js)
+- **Backend API**: `/api/generate-quiz` and `/api/gemini-upload`
+- **AI Integration**: Google Gemini 1.5-flash via SDK (text) and REST API (files)
+- **File Support**: Resumable uploads to Gemini with drag & drop UI
+- **Input methods**: Text input OR file uploads (PDF, images, docs)
 - **Output**: JSON-formatted quiz questions with validation
 
 ### Quiz Generation Pipeline
-1. **Input Processing**: Accepts PM learning text via CLI arguments
-2. **AI Prompting**: Structured prompt engineering for PM-specific questions
-3. **Response Validation**: Strict JSON schema validation with automatic repair
-4. **Error Handling**: Graceful failures with specific error codes
+1. **Input Processing**: Accepts PM text or uploaded files via web interface
+2. **File Handling**: Resumable upload to Gemini API with status tracking
+3. **AI Prompting**: Structured prompts for text-only or file-based generation
+4. **Response Validation**: JSON schema validation with automatic repair attempts
+5. **Error Handling**: Retry buttons and graceful failure messaging
 
 ### Data Structure
 Questions follow this schema:
@@ -80,14 +83,21 @@ This tool is designed specifically for PM learning scenarios:
 
 ## Development Status
 
-**Current Implementation**: CLI-based quiz generator
-**Next Phase**: Next.js web application (dependencies already added)
+**Current Implementation**: Full web application with file upload support
+**Recent Features**: 
+- Gemini file upload API with resumable uploads
+- Drag & drop file interface with status chips
+- Quiz generation from attached files (PDF, images, docs)
+- Retry buttons for better error UX
+- Dynamic question count based on content length
+- Randomized answer positions
 
-The roadmap includes completing the React/Next.js web application with:
-- Paste-based text input interface
+**Architecture Complete**:
+- Text-based quiz generation via Gemini SDK
+- File-based quiz generation via Gemini REST API  
 - Real-time quiz UI with immediate feedback
-- Score summaries with PM-specific improvement hints
-- Tailwind CSS styling in PM tool aesthetic
+- Score summaries and navigation
+- Tailwind CSS styling
 
 ## AI Integration Notes
 
