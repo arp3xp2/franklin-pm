@@ -19,6 +19,20 @@ function validate(questions) {
 
 export default async function handler(req, res) {
 	if (req.method !== 'POST') return res.status(405).json({ error: 'Nur POST' });
+	// Basic rate limit per IP (MVP): 10 req / 15 min
+	globalThis.__RATE__ = globalThis.__RATE__ || { windowMs: 15 * 60 * 1000, max: 10, map: new Map() };
+	const { windowMs, max, map } = globalThis.__RATE__;
+	const ip = (req.headers['x-forwarded-for']?.toString()?.split(',')[0]?.trim()) || req.socket?.remoteAddress || 'unknown';
+	const now = Date.now();
+	const entry = map.get(ip) || { count: 0, start: now };
+	if (now - entry.start >= windowMs) { entry.count = 0; entry.start = now; }
+	entry.count += 1; map.set(ip, entry);
+	res.setHeader('X-RateLimit-Limit', String(max));
+	res.setHeader('X-RateLimit-Remaining', String(Math.max(0, max - entry.count)));
+	if (entry.count > max) {
+		res.setHeader('Retry-After', String(Math.ceil((entry.start + windowMs - now) / 1000)));
+		return res.status(429).json({ error: 'Zu viele Anfragen. Bitte später erneut versuchen.' });
+	}
 	const { text } = req.body || {};
 	if (!text || typeof text !== 'string' || text.trim().length < 50) {
 		return res.status(400).json({ error: 'Bitte ausreichend Lerntext senden.' });
