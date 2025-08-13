@@ -47,7 +47,7 @@ export default function Home() {
 	return (
 		<div className="container">
 			<div className="header">
-				<h1>Franklin</h1>
+				<h1>Franklin 🎓</h1>
 				<p>PM-Quiz Generator für deine Lernmaterialien</p>
 			</div>
 
