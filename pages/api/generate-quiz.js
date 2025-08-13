@@ -1,5 +1,38 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// Simple in-memory rate limit per IP (MVP only)
+const RATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const RATE_MAX_REQUESTS = 10; // per window
+const ipToUsage = new Map();
+
+function getClientIp(req) {
+	const xfwd = req.headers['x-forwarded-for'];
+	if (typeof xfwd === 'string' && xfwd.length > 0) return xfwd.split(',')[0].trim();
+	return req.socket?.remoteAddress || 'unknown';
+}
+
+function checkRateLimit(req, res) {
+	const ip = getClientIp(req);
+	const now = Date.now();
+	const usage = ipToUsage.get(ip) || { count: 0, start: now };
+	if (now - usage.start >= RATE_WINDOW_MS) {
+		usage.count = 0;
+		usage.start = now;
+	}
+	usage.count += 1;
+	ipToUsage.set(ip, usage);
+	const remaining = Math.max(0, RATE_MAX_REQUESTS - usage.count);
+	res.setHeader('X-RateLimit-Limit', RATE_MAX_REQUESTS.toString());
+	res.setHeader('X-RateLimit-Remaining', remaining.toString());
+	if (usage.count > RATE_MAX_REQUESTS) {
+		const retryAfterSec = Math.ceil((usage.start + RATE_WINDOW_MS - now) / 1000);
+		res.setHeader('Retry-After', retryAfterSec.toString());
+		res.status(429).json({ error: 'Zu viele Anfragen. Bitte später erneut versuchen.' });
+		return false;
+	}
+	return true;
+}
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
@@ -19,6 +52,7 @@ function validate(questions) {
 
 export default async function handler(req, res) {
 	if (req.method !== 'POST') return res.status(405).json({ error: 'Nur POST' });
+	if (!checkRateLimit(req, res)) return;
 	const { text } = req.body || {};
 	if (!text || typeof text !== 'string' || text.trim().length < 50) {
 		return res.status(400).json({ error: 'Bitte ausreichend Lerntext senden.' });
