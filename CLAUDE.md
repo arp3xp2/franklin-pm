@@ -44,7 +44,7 @@ The application requires a Gemini API key for AI question generation:
 ### Current Web Architecture
 - **Frontend**: Next.js with React (pages/index.js)
 - **Backend API**: `/api/generate-quiz` and `/api/gemini-upload`
-- **AI Integration**: Google Gemini 1.5-flash via SDK (text) and REST API (files)
+- **AI Integration**: Google Gemini 2.5-flash via SDK (text) and REST API (files)
 - **File Support**: Resumable uploads to Gemini with drag & drop UI
 - **Input methods**: Text input OR file uploads (PDF, images, docs)
 - **Output**: JSON-formatted quiz questions with validation
@@ -101,7 +101,7 @@ This tool is designed specifically for PM learning scenarios:
 
 ## AI Integration Notes
 
-- Uses Google Gemini 1.5 Flash model for cost efficiency
+- Uses Google Gemini 2.5 Flash model for improved performance
 - Prompt engineering focuses on PM-specific question generation
 - Built-in JSON repair mechanism for AI response reliability
 - Validates exactly 3 questions with 5 options each

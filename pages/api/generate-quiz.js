@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 function safeParseJson(text) {
 	try {
@@ -38,6 +38,68 @@ function shuffleCorrectAnswers(questions) {
 			richtige_index: newIndex
 		};
 	});
+}
+
+/**
+ * Ask the model to enforce that each question has exactly one uniquely correct answer.
+ * Keeps wording minimal; returns fixed questions or the original array on failure.
+ */
+async function ensureUniqueCorrectness(questions, { text, files }) {
+	try {
+		const instruction = `Überarbeite die folgenden Multiple-Choice-Fragen anhand des Kontexts so, dass JEDE Frage GENAU eine korrekte Option hat und die vier anderen klar falsch bzw. unzutreffend sind.\nWICHTIG:\n- Bewahre Intention und Sprache der Frage.\n- Passe nur die Antwortoptionen minimal an, um Mehrdeutigkeit zu entfernen.\n- Aktualisiere "richtige_index" entsprechend.\n- Gib AUSSCHLIESSLICH ein VALIDE JSON-ARRAY im exakt folgenden Schema zurück (keine Markdown-Codeblöcke, kein Fließtext):\n[{
+  "frage": "string",
+  "optionen": ["string","string","string","string","string"],
+  "richtige_index": 0,
+  "erklaerung": "string"
+}]`;
+
+		const promptText = (text && typeof text === 'string')
+			? `${instruction}\n\nKontext (Text):\n"${text}"\n\nFragen:\n${JSON.stringify(questions)}`
+			: `${instruction}\n\nKontext: Verwende die angehängten Dateien.\n\nFragen:\n${JSON.stringify(questions)}`;
+
+		// Build parts for REST call if files are provided; otherwise use SDK
+		const hasFiles = Array.isArray(files) && files.some(f => f.geminiFileId);
+		if (hasFiles) {
+			const parts = [{ text: promptText }];
+			for (const file of files.filter(f => f.geminiFileId)) {
+				const fileUri = file.geminiFileId.startsWith('https://')
+					? file.geminiFileId
+					: `https://generativelanguage.googleapis.com/v1beta/${file.geminiFileId}`;
+				parts.push({
+					fileData: {
+						fileUri,
+						mimeType: file.type || 'application/octet-stream'
+					}
+				});
+			}
+			const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'x-goog-api-key': process.env.GEMINI_API_KEY
+				},
+				body: JSON.stringify({
+					contents: [{ role: 'user', parts }]
+				})
+			});
+			if (!response.ok) return questions;
+			const responseData = await response.json();
+			const textOut = responseData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+			const parsed = safeParseJson(textOut);
+			if (!parsed) return questions;
+			const err = validate(parsed, questions.length);
+			return err ? questions : parsed;
+		} else {
+			const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: promptText }] }] });
+			const textOut = result.response.text();
+			const parsed = safeParseJson(textOut);
+			if (!parsed) return questions;
+			const err = validate(parsed, questions.length);
+			return err ? questions : parsed;
+		}
+	} catch {
+		return questions;
+	}
 }
 
 function calculateQuestionCount(textLength) {
@@ -120,7 +182,7 @@ export default async function handler(req, res) {
 				});
 			}
 			
-			const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', {
+			const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -165,8 +227,10 @@ export default async function handler(req, res) {
 			console.log('Validation error:', err, 'Data structure:', JSON.stringify(data, null, 2));
 			return res.status(502).json({ error: err });
 		}
+		// Enforce single uniquely correct answer per question to avoid "zwei technisch korrekte Antworten"-Fälle
+		const uniquenessFixed = await ensureUniqueCorrectness(data, { text, files });
 		
-		const shuffledQuestions = shuffleCorrectAnswers(data);
+		const shuffledQuestions = shuffleCorrectAnswers(uniquenessFixed);
 		return res.status(200).json({ questions: shuffledQuestions });
 	} catch (e) {
 		return res.status(503).json({ error: e?.message || 'Fehler bei der Generierung' });
